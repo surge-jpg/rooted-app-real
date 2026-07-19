@@ -38,7 +38,7 @@ export default function BossArena({ userId, onNavigate, createdAt }) {
         supabase.from('task_completions').select('*').eq('user_id', userId).eq('completed_date', today),
         supabase.from('task_completions').select('task_id, completed_date').eq('user_id', userId).gte('completed_date', tenDaysAgo),
         supabase.from('stats').select('*').eq('user_id', userId),
-        supabase.from('seasons').select('*').eq('user_id', userId).is('defeated_at', null).order('created_at', { ascending: false }).limit(1).maybeSingle(),
+        supabase.from('seasons').select('*').eq('user_id', userId).is('defeated_at', null).order('started_at', { ascending: false }).limit(1).maybeSingle(),
       ])
 
     setTasks(taskDefs || [])
