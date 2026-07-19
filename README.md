@@ -74,6 +74,12 @@ Everything from the design spec is implemented and wired to a real database:
   Plaid/bank linking), consistent with the "real discipline, not
   automation" philosophy discussed during design.
 
+## If you already deployed a previous version
+
+Run `supabase/migration_add_celebrated_at.sql` in the Supabase SQL editor —
+it adds one new column needed for the GTR completion celebration. New
+projects running `schema.sql` fresh don't need this, it's already included.
+
 ## Setup
 
 1. **Create a Supabase project** at supabase.com (free tier).

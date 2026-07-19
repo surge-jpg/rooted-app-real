@@ -133,6 +133,7 @@ create table goals (
   target_amount numeric not null default 100000,
   current_amount numeric not null default 0,
   is_active boolean default true,
+  celebrated_at timestamptz,
   created_at timestamptz default now()
 );
 

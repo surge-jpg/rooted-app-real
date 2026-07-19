@@ -1,6 +1,18 @@
+import { useState, useEffect } from 'react'
+
 // Renders the wraith boss. As hpPct drops, more cracks/broken chain links appear —
 // implementing the "armor cracks, chains break" spec from the original design doc.
-export default function BossCreature({ hpPct = 100 }) {
+// hitKey changes every time a hit lands, triggering a brief flash/shake reaction.
+export default function BossCreature({ hpPct = 100, hitKey }) {
+  const [flashing, setFlashing] = useState(false)
+
+  useEffect(() => {
+    if (!hitKey) return
+    setFlashing(true)
+    const t = setTimeout(() => setFlashing(false), 350)
+    return () => clearTimeout(t)
+  }, [hitKey])
+
   const showCrack2 = hpPct <= 66
   const showCrack3 = hpPct <= 33
   const chainBroken1 = hpPct <= 75
@@ -9,7 +21,7 @@ export default function BossCreature({ hpPct = 100 }) {
   return (
     <>
       <div className="boss-shadow-blob" />
-      <div className="boss-wrap">
+      <div className={`boss-wrap ${flashing ? 'hit-flash' : ''}`}>
         <svg viewBox="0 0 210 270" fill="none">
           <path d="M100 4 L128 14 C158 26 176 58 172 92 L182 100 C204 112 210 142 200 172 L206 200 C210 220 198 240 178 248 L182 262 L150 254 L118 264 L100 256 L78 264 L46 254 L52 240 C30 234 16 214 20 192 L10 168 C4 140 14 112 38 98 L46 88 C46 54 66 22 100 4 Z"
             fill="#0e0f16" stroke="#3a3d4e" strokeWidth="2.5"/>

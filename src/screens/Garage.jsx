@@ -17,6 +17,7 @@ export default function Garage({ userId, onNavigate }) {
   const [amount, setAmount] = useState('')
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
+  const [showCelebration, setShowCelebration] = useState(false)
 
   useEffect(() => { loadGoal() }, [userId])
 
@@ -39,9 +40,19 @@ export default function Garage({ userId, onNavigate }) {
     if (isNaN(value) || value <= 0) return
 
     setSubmitting(true)
+    const newAmount = goal.current_amount + value
+    const wasIncomplete = goal.current_amount < goal.target_amount
+    const isNowComplete = newAmount >= goal.target_amount
+
     await supabase.from('goal_contributions').insert({ goal_id: goal.id, user_id: userId, amount: value })
-    await supabase.from('goals').update({ current_amount: goal.current_amount + value }).eq('id', goal.id)
+    await supabase.from('goals').update({ current_amount: newAmount }).eq('id', goal.id)
     setAmount('')
+
+    if (wasIncomplete && isNowComplete && !goal.celebrated_at) {
+      await supabase.from('goals').update({ celebrated_at: new Date().toISOString() }).eq('id', goal.id)
+      setShowCelebration(true)
+    }
+
     await loadGoal()
     setSubmitting(false)
   }
@@ -50,6 +61,22 @@ export default function Garage({ userId, onNavigate }) {
   if (!goal) return <div className="screen">No active restoration project yet. Add a goal in Supabase to get started.</div>
 
   const stage = getRestorationStage(goal.current_amount, goal.target_amount)
+
+  if (showCelebration) {
+    return (
+      <div className="celebration-screen">
+        <div className="celebration-burst">🎉</div>
+        <h1>Fully Restored</h1>
+        <p className="celebration-sub">{goal.title}</p>
+        <p className="celebration-verse">"She is clothed in strength and dignity, and she laughs without fear of the future." — Proverbs 31:25</p>
+        <p className="celebration-note">
+          Every dollar you saved was a small act of faithfulness. This car was never the point —
+          it's proof of what steady, patient stewardship builds over time.
+        </p>
+        <button className="cta gold" onClick={() => setShowCelebration(false)}>Continue</button>
+      </div>
+    )
+  }
 
   return (
     <div className="game-frame">

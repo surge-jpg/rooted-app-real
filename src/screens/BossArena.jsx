@@ -10,6 +10,7 @@ import {
 import SeasonDefeatScreen from './SeasonDefeatScreen'
 import BossCreature from '../components/BossCreature'
 import StatusBar from '../components/StatusBar'
+import DiceRollOverlay from '../components/DiceRollOverlay'
 
 export default function BossArena({ userId, onNavigate, createdAt }) {
   const [tasks, setTasks] = useState([])
@@ -20,7 +21,9 @@ export default function BossArena({ userId, onNavigate, createdAt }) {
   const [treeState, setTreeState] = useState({ tier: 'healthy', modifier: 0, label: 'Healthy' })
   const [loading, setLoading] = useState(true)
   const [showDefeat, setShowDefeat] = useState(false)
-  const [rolling, setRolling] = useState(null)
+  const [rolling, setRolling] = useState(null) // task currently mid-roll (disables its card)
+  const [diceOverlay, setDiceOverlay] = useState(null) // { task, sides, result } while the roll animation plays
+  const [floatingDamage, setFloatingDamage] = useState(null) // { amount, key } for the pop-up animation
 
   useEffect(() => { loadArenaData(true) }, [userId])
 
@@ -35,7 +38,7 @@ export default function BossArena({ userId, onNavigate, createdAt }) {
         supabase.from('task_completions').select('*').eq('user_id', userId).eq('completed_date', today),
         supabase.from('task_completions').select('task_id, completed_date').eq('user_id', userId).gte('completed_date', tenDaysAgo),
         supabase.from('stats').select('*').eq('user_id', userId),
-        supabase.from('seasons').select('*').eq('user_id', userId).is('defeated_at', null).order('season_number', { ascending: false }).limit(1).maybeSingle(),
+        supabase.from('seasons').select('*').eq('user_id', userId).is('defeated_at', null).order('created_at', { ascending: false }).limit(1).maybeSingle(),
       ])
 
     setTasks(taskDefs || [])
@@ -59,17 +62,25 @@ export default function BossArena({ userId, onNavigate, createdAt }) {
     if (isInitial) setLoading(false)
   }
 
-  async function completeTask(task) {
-    if (completions[task.id] || !season) return
-    setRolling(task.id)
-
+  // Step 1: player taps a task. We compute the real roll immediately (so the
+  // outcome is already decided, same as a physical dice roll) but don't
+  // commit anything to the database yet — we show the animated overlay
+  // first, and only apply the result once the animation finishes.
+  function startRoll(task) {
+    if (completions[task.id] || !season || diceOverlay) return
     const stat = stats[task.stat_key] || { completions_total: 0, stat_key: task.stat_key }
     const tierInfo = getTierForCompletions(stat.completions_total)
     const rawRoll = rollDie(tierInfo.die)
+    setRolling(task.id)
+    setDiceOverlay({ task, stat, tierInfo, rawRoll, sides: tierInfo.die })
+  }
+
+  // Step 2: called by DiceRollOverlay once its animation finishes landing
+  // on the real result. This is where we actually write to the database.
+  async function commitRoll() {
+    const { task, stat, rawRoll } = diceOverlay
     const finalDamage = applyTreeModifier(rawRoll, treeState.modifier)
     const today = new Date().toISOString().slice(0, 10)
-
-    await new Promise((r) => setTimeout(r, 550))
 
     await supabase.from('task_completions').insert({
       user_id: userId, task_id: task.id, completed_date: today,
@@ -85,6 +96,10 @@ export default function BossArena({ userId, onNavigate, createdAt }) {
 
     const newHP = Math.max(0, season.hp_current - finalDamage)
     await supabase.from('seasons').update({ hp_current: newHP }).eq('id', season.id)
+
+    setDiceOverlay(null)
+    setFloatingDamage({ amount: finalDamage, key: Date.now() })
+    setTimeout(() => setFloatingDamage(null), 1000)
 
     if (newHP === 0) {
       await supabase.from('seasons').update({ defeated_at: new Date().toISOString() }).eq('id', season.id)
@@ -128,7 +143,19 @@ export default function BossArena({ userId, onNavigate, createdAt }) {
         <div className="ground-glow" />
       </div>
 
-      <BossCreature hpPct={hpPct} />
+      <BossCreature hpPct={hpPct} hitKey={floatingDamage?.key} />
+      {floatingDamage && (
+        <div key={floatingDamage.key} className="floating-damage">−{floatingDamage.amount}</div>
+      )}
+
+      {diceOverlay && (
+        <DiceRollOverlay
+          sides={diceOverlay.sides}
+          finalResult={diceOverlay.rawRoll}
+          taskLabel={`${diceOverlay.task.emoji} ${diceOverlay.task.label}`}
+          onComplete={commitRoll}
+        />
+      )}
 
       <div className="hud">
         <StatusBar>DAY {dayNumber}</StatusBar>
@@ -189,7 +216,7 @@ export default function BossArena({ userId, onNavigate, createdAt }) {
                 <button
                   key={task.id}
                   className={`qcard ${done ? 'done' : ''} ${isRolling ? 'rolling' : ''}`}
-                  onClick={() => completeTask(task)}
+                  onClick={() => startRoll(task)}
                   disabled={done || isRolling}
                 >
                   {done && <div className="check">✓</div>}
